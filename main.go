@@ -81,6 +81,7 @@ func setupTapRelays() error {
 
 	log.Trace("Setting Up GPIO")
 
+	_taps := make([]tap, 4)
 	_taps[0].OpenRelay = rpio.Pin(5)
 	_taps[0].CloseRelay = rpio.Pin(6)
 
@@ -207,6 +208,7 @@ func cardScan(cardID string) {
 	log.Tracef("Card Scanned %v", cardID)
 }
 func tapButtonPress(tap int, state bool) {
+	log.Tracef("Tap %v Button Pressed %v", tap, state)
 	if state {
 		_taps[tap].OpenRelay.Low()
 		time.Sleep(700)
