@@ -28,6 +28,7 @@ var (
 type tap struct {
 	OpenRelay  rpio.Pin
 	CloseRelay rpio.Pin
+	IsOpen     bool
 }
 
 type usbDataMessage struct {
@@ -162,7 +163,7 @@ func handleUSBDevice(device string) {
 				if err != nil {
 					log.Warn("USB Marshal Error:", err)
 				} else {
-					handleUSBMessage(Message)
+					go handleUSBMessage(Message)
 				}
 			}
 		}
@@ -176,7 +177,7 @@ func handleUSBMessage(Message usbDataMessage) {
 		//Convert negative numbers to positive
 		cardScan(Message.Value)
 	case "buttonpress":
-
+		cardButtonPress()
 	case "tap1":
 		state, err := strconv.ParseBool(Message.Value)
 		if err != nil {
@@ -203,25 +204,28 @@ func handleUSBMessage(Message usbDataMessage) {
 		tapButtonPress(4, state)
 	}
 }
-
 func cardScan(cardID string) {
 	log.Tracef("Card Scanned %v", cardID)
 }
 func tapButtonPress(tap int, state bool) {
 	log.Tracef("Tap %v Button Pressed %v", tap, state)
 	tap = tap - 1
-	if state {
+
+	if state && !_taps[tap].IsOpen {
+		_taps[tap].IsOpen = true
 		_taps[tap].OpenRelay.Low()
-		time.Sleep(700)
+		time.Sleep(700 * time.Millisecond)
 		_taps[tap].OpenRelay.High()
-	} else {
-		_taps[tap].OpenRelay.Low()
-		time.Sleep(700)
-		_taps[tap].OpenRelay.High()
+	} else if !state && _taps[tap].IsOpen {
+		_taps[tap].IsOpen = false
+		_taps[tap].CloseRelay.Low()
+		time.Sleep(700 * time.Millisecond)
+		_taps[tap].CloseRelay.High()
 	}
+}
+func cardButtonPress() {
 
 }
-
 func connectToMQTT() error {
 	ServerAddr, err := net.ResolveUDPAddr("udp", "255.255.255.255:10001")
 	if err != nil {
