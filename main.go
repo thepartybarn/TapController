@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net"
@@ -11,6 +13,8 @@ import (
 
 	"github.com/eclipse/paho.mqtt.golang"
 	"github.com/sirupsen/logrus"
+	"github.com/stianeikeland/go-rpio"
+	"github.com/tarm/serial"
 )
 
 var (
@@ -18,8 +22,14 @@ var (
 	_buildVersion     string
 	_homepageTemplate *template.Template
 	log               = logrus.New()
+	_relays           []rpio.Pin
 	mqttClient        mqtt.Client
 )
+
+type USBDataMessage struct {
+	Key   string `json:"key"`
+	Value string `json:"Value"`
+}
 
 func main() {
 	var err error
@@ -30,21 +40,142 @@ func main() {
 	if err != nil {
 		log.Panic(err)
 	}
-
-	item, err := getIPAddress("eth0")
+	//eth0IP
+	_, err = getIPAddress("eth0")
+	if err != nil {
+		log.Error(err)
+	}
+	//wlan0IP
+	_, err = getIPAddress("wlan0")
+	if err != nil {
+		log.Error(err)
+	}
+	err = setupRelays()
 	if err != nil {
 		log.Panic(err)
 	}
-	log.Tracef("Interface:%+v", item)
+	defer rpio.Close()
 
 	go udpServer([]byte("Trailer Server"))
 	go httpServer()
+	go handleUSBDevice("/dev/ttyUSB0")
+	go handleUSBDevice("/dev/ttyUSB1")
 
 	connectToMQTT()
 
 	select {}
 }
+func setupRelays() error {
+	var err error
 
+	log.Trace("Opening GPIO")
+	err = rpio.Open()
+	if err != nil {
+		return err
+	}
+	log.Trace("Opened GPIO Successfully")
+
+	log.Trace("Setting Up GPIO")
+	RelayPins := []int{5, 6, 13, 16, 19, 20, 21, 26}
+	for _, RelayPin := range RelayPins {
+		Relay := rpio.Pin(RelayPin)
+		Relay.Output()
+		Relay.High()
+		_relays = append(_relays, Relay)
+	}
+	log.Trace("Setup GPIO Successfully")
+	return nil
+}
+
+func handleUSBDevice(device string) {
+	var serialBuffer bytes.Buffer
+	var serialPort *serial.Port
+
+	serialConfig := &serial.Config{Name: device, Baud: 9600}
+
+	var err error
+	//Serial Port Open Loop
+	for {
+		serialPort, err = serial.OpenPort(serialConfig)
+		if err != nil {
+			log.Error("USB Serial Port Not Found")
+			time.Sleep(time.Second)
+		}
+		defer serialPort.Close()
+
+		temp := make([]byte, 256)
+		var MessagePayload []byte
+		var nRead int
+
+		defer func() {
+			if r := recover(); r != nil {
+				log.Info("Recovered in f", r)
+			}
+		}()
+
+		//Read Loop
+		for {
+			nRead, err = serialPort.Read(temp)
+			if err != nil {
+				log.Warn("USB Read Error:", err)
+				break
+			}
+			if nRead > 0 {
+				serialBuffer.Write(temp[:nRead])
+			}
+			tempData := serialBuffer.Bytes()
+			endOfMessage := bytes.IndexByte(tempData, '}')
+			if endOfMessage > 0 {
+				beginingOfMessage := bytes.IndexByte(tempData, '{')
+				if beginingOfMessage >= 0 {
+					MessagePayload = tempData[beginingOfMessage : endOfMessage+1]
+				}
+				//Clear buffer before }
+				serialBuffer.Next(endOfMessage + 1)
+			} else {
+				//Didn't Find End Keep storing buffer.
+				//TODO We should limit this to a particular size
+			}
+			//Process Message
+			if len(MessagePayload) > 3 {
+				log.Trace("USB Message Received: ", string(MessagePayload))
+				var Message USBDataMessage
+				err := json.Unmarshal(MessagePayload, &Message)
+				MessagePayload = nil
+				if err != nil {
+					log.Warn("USB Marshal Error:", err)
+				} else {
+					handleUSBMessage(Message)
+				}
+			}
+		}
+	}
+	log.Warn("USB Serial Loop Exited")
+	serialPort.Close()
+}
+
+func handleUSBMessage(Message USBDataMessage) {
+	switch Message.Key {
+	case "cardID":
+		//Convert negative numbers to positive
+		cardScan(Message.Value)
+	case "buttonpress":
+
+	case "tap1":
+
+	case "tap2":
+
+	case "tap3":
+
+	case "tap4":
+
+	}
+
+}
+
+func cardScan(cardID string) {
+	log.Tracef("Card Scanned %v", cardID)
+}
 func connectToMQTT() error {
 	ServerAddr, err := net.ResolveUDPAddr("udp", "255.255.255.255:10001")
 	if err != nil {
@@ -89,7 +220,6 @@ func connectToMQTT() error {
 
 	return nil
 }
-
 func udpServer(dataToSend []byte) {
 	ServerAddr, err := net.ResolveUDPAddr("udp", ":10001")
 	if err != nil {
@@ -125,7 +255,27 @@ func udpServer(dataToSend []byte) {
 		fmt.Printf("packet-written: bytes=%d to=%s\n", n, addr.String())
 	}
 }
+func getIPAddress(name string) (ipNet *net.IPNet, err error) {
+	iface, err := net.InterfaceByName(name)
+	if err != nil {
+		return
+	}
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return
+	}
+	for _, a := range addrs {
+		item, ok := a.(*net.IPNet)
+		if ok && !item.IP.IsLoopback() && item.IP.To4() != nil {
+			log.Tracef("%v: %v", name, item.String())
+			ipNet = item
+		}
+	}
 
+	return
+}
+
+//HTTP STUFF
 func httpServer() {
 	var err error
 	http.HandleFunc("/", homepage)
@@ -142,7 +292,6 @@ func httpServer() {
 		log.Panic(err)
 	}
 }
-
 func homepage(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -155,31 +304,11 @@ func homepage(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 	}
 }
-
 func loadPageTemplates() error {
 	var err error
 	_homepageTemplate, err = template.ParseFiles("web/index.html")
 	return err
 }
-
-func getIPAddress(name string) (ipNet *net.IPNet, err error) {
-	iface, err := net.InterfaceByName(name)
-	if err != nil {
-		return
-	}
-	addrs, err := iface.Addrs()
-	if err != nil {
-		return
-	}
-	for _, a := range addrs {
-		item, ok := a.(*net.IPNet)
-		if ok && !item.IP.IsLoopback() && item.IP.To4() != nil {
-			ipNet = item
-		}
-	}
-	return
-}
-
 func setRelayHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -193,12 +322,13 @@ func setRelayHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if Relay >= 1 && Relay <= 8 {
-
 		switch StateString {
 		case "TRUE":
 			log.Info("Set Relay ", Relay, " to ", StateString)
+			_relays[Relay-1].Low()
 		case "FALSE":
 			log.Info("Set Relay ", Relay, " to ", StateString)
+			_relays[Relay-1].High()
 		}
 	}
 }
