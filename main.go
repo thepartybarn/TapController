@@ -81,7 +81,7 @@ func setupTapRelays() error {
 
 	log.Trace("Setting Up GPIO")
 
-	_taps := make([]tap, 4)
+	_taps = make([]tap, 4)
 	_taps[0].OpenRelay = rpio.Pin(5)
 	_taps[0].CloseRelay = rpio.Pin(6)
 
@@ -182,25 +182,25 @@ func handleUSBMessage(Message usbDataMessage) {
 		if err != nil {
 			log.Warn(err)
 		}
-		tapButtonPress(0, state)
+		tapButtonPress(1, state)
 	case "tap2":
 		state, err := strconv.ParseBool(Message.Value)
 		if err != nil {
 			log.Warn(err)
 		}
-		tapButtonPress(1, state)
+		tapButtonPress(2, state)
 	case "tap3":
 		state, err := strconv.ParseBool(Message.Value)
 		if err != nil {
 			log.Warn(err)
 		}
-		tapButtonPress(2, state)
+		tapButtonPress(3, state)
 	case "tap4":
 		state, err := strconv.ParseBool(Message.Value)
 		if err != nil {
 			log.Warn(err)
 		}
-		tapButtonPress(3, state)
+		tapButtonPress(4, state)
 	}
 }
 
@@ -209,6 +209,7 @@ func cardScan(cardID string) {
 }
 func tapButtonPress(tap int, state bool) {
 	log.Tracef("Tap %v Button Pressed %v", tap, state)
+	tap = tap - 1
 	if state {
 		_taps[tap].OpenRelay.Low()
 		time.Sleep(700)
