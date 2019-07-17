@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/eclipse/paho.mqtt.golang"
@@ -22,11 +21,16 @@ var (
 	_buildVersion     string
 	_homepageTemplate *template.Template
 	log               = logrus.New()
-	_relays           []rpio.Pin
+	_taps             []tap
 	mqttClient        mqtt.Client
 )
 
-type USBDataMessage struct {
+type tap struct {
+	OpenRelay  rpio.Pin
+	CloseRelay rpio.Pin
+}
+
+type usbDataMessage struct {
 	Key   string `json:"key"`
 	Value string `json:"Value"`
 }
@@ -50,7 +54,7 @@ func main() {
 	if err != nil {
 		log.Error(err)
 	}
-	err = setupRelays()
+	err = setupTapRelays()
 	if err != nil {
 		log.Panic(err)
 	}
@@ -65,7 +69,7 @@ func main() {
 
 	select {}
 }
-func setupRelays() error {
+func setupTapRelays() error {
 	var err error
 
 	log.Trace("Opening GPIO")
@@ -76,17 +80,28 @@ func setupRelays() error {
 	log.Trace("Opened GPIO Successfully")
 
 	log.Trace("Setting Up GPIO")
-	RelayPins := []int{5, 6, 13, 16, 19, 20, 21, 26}
-	for _, RelayPin := range RelayPins {
-		Relay := rpio.Pin(RelayPin)
-		Relay.Output()
-		Relay.High()
-		_relays = append(_relays, Relay)
+
+	_taps[0].OpenRelay = rpio.Pin(5)
+	_taps[0].CloseRelay = rpio.Pin(6)
+
+	_taps[1].OpenRelay = rpio.Pin(13)
+	_taps[1].CloseRelay = rpio.Pin(16)
+
+	_taps[2].OpenRelay = rpio.Pin(19)
+	_taps[2].CloseRelay = rpio.Pin(20)
+
+	_taps[3].OpenRelay = rpio.Pin(21)
+	_taps[3].CloseRelay = rpio.Pin(26)
+
+	for _, tap := range _taps {
+		tap.OpenRelay.Output()
+		tap.OpenRelay.High()
+		tap.CloseRelay.Output()
+		tap.CloseRelay.High()
 	}
 	log.Trace("Setup GPIO Successfully")
 	return nil
 }
-
 func handleUSBDevice(device string) {
 	var serialBuffer bytes.Buffer
 	var serialPort *serial.Port
@@ -107,12 +122,13 @@ func handleUSBDevice(device string) {
 		var MessagePayload []byte
 		var nRead int
 
+		/*TODO handle usb ports better
 		defer func() {
 			if r := recover(); r != nil {
 				log.Info("Recovered in f", r)
 			}
 		}()
-
+		*/
 		//Read Loop
 		for {
 			nRead, err = serialPort.Read(temp)
@@ -139,7 +155,7 @@ func handleUSBDevice(device string) {
 			//Process Message
 			if len(MessagePayload) > 3 {
 				log.Trace("USB Message Received: ", string(MessagePayload))
-				var Message USBDataMessage
+				var Message usbDataMessage
 				err := json.Unmarshal(MessagePayload, &Message)
 				MessagePayload = nil
 				if err != nil {
@@ -153,8 +169,7 @@ func handleUSBDevice(device string) {
 	log.Warn("USB Serial Loop Exited")
 	serialPort.Close()
 }
-
-func handleUSBMessage(Message USBDataMessage) {
+func handleUSBMessage(Message usbDataMessage) {
 	switch Message.Key {
 	case "cardID":
 		//Convert negative numbers to positive
@@ -162,20 +177,48 @@ func handleUSBMessage(Message USBDataMessage) {
 	case "buttonpress":
 
 	case "tap1":
-
+		state, err := strconv.ParseBool(Message.Value)
+		if err != nil {
+			log.Warn(err)
+		}
+		tapButtonPress(0, state)
 	case "tap2":
-
+		state, err := strconv.ParseBool(Message.Value)
+		if err != nil {
+			log.Warn(err)
+		}
+		tapButtonPress(1, state)
 	case "tap3":
-
+		state, err := strconv.ParseBool(Message.Value)
+		if err != nil {
+			log.Warn(err)
+		}
+		tapButtonPress(2, state)
 	case "tap4":
-
+		state, err := strconv.ParseBool(Message.Value)
+		if err != nil {
+			log.Warn(err)
+		}
+		tapButtonPress(3, state)
 	}
-
 }
 
 func cardScan(cardID string) {
 	log.Tracef("Card Scanned %v", cardID)
 }
+func tapButtonPress(tap int, state bool) {
+	if state {
+		_taps[tap].OpenRelay.Low()
+		time.Sleep(700)
+		_taps[tap].OpenRelay.High()
+	} else {
+		_taps[tap].OpenRelay.Low()
+		time.Sleep(700)
+		_taps[tap].OpenRelay.High()
+	}
+
+}
+
 func connectToMQTT() error {
 	ServerAddr, err := net.ResolveUDPAddr("udp", "255.255.255.255:10001")
 	if err != nil {
@@ -279,7 +322,7 @@ func getIPAddress(name string) (ipNet *net.IPNet, err error) {
 func httpServer() {
 	var err error
 	http.HandleFunc("/", homepage)
-	http.HandleFunc("/api/setRelay", setRelayHandler)
+	//http.HandleFunc("/api/setRelay", setRelayHandler)
 
 	//Serve Static Files
 	http.Handle("/images/", http.StripPrefix("/images/", http.FileServer(http.Dir("web/images/"))))
@@ -309,7 +352,8 @@ func loadPageTemplates() error {
 	_homepageTemplate, err = template.ParseFiles("web/index.html")
 	return err
 }
-func setRelayHandler(w http.ResponseWriter, r *http.Request) {
+
+/*func setRelayHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	RelayString := r.URL.Query().Get("Relay")
@@ -332,3 +376,4 @@ func setRelayHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+*/
