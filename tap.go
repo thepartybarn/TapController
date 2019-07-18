@@ -41,6 +41,8 @@ func setupTapRelays() (err error, taps map[int]*tapStruct) {
 
 	log.Trace("Setting Up GPIO")
 
+	taps = make(map[int]*tapStruct)
+
 	taps[1] = &tapStruct{OpenRelay: rpio.Pin(5), CloseRelay: rpio.Pin(6), IsOpen: false}
 	taps[2] = &tapStruct{OpenRelay: rpio.Pin(13), CloseRelay: rpio.Pin(16), IsOpen: false}
 	taps[3] = &tapStruct{OpenRelay: rpio.Pin(19), CloseRelay: rpio.Pin(20), IsOpen: false}
