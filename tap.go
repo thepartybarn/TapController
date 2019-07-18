@@ -43,10 +43,10 @@ func setupTapRelays() (err error, taps map[int]*tapStruct) {
 
 	taps = make(map[int]*tapStruct)
 
-	taps[1] = &tapStruct{OpenRelay: rpio.Pin(5), CloseRelay: rpio.Pin(6), IsOpen: false}
-	taps[2] = &tapStruct{OpenRelay: rpio.Pin(13), CloseRelay: rpio.Pin(16), IsOpen: false}
-	taps[3] = &tapStruct{OpenRelay: rpio.Pin(19), CloseRelay: rpio.Pin(20), IsOpen: false}
-	taps[4] = &tapStruct{OpenRelay: rpio.Pin(21), CloseRelay: rpio.Pin(26), IsOpen: false}
+	taps[1] = &tapStruct{OpenRelay: rpio.Pin(6), CloseRelay: rpio.Pin(5), IsOpen: false}
+	taps[2] = &tapStruct{OpenRelay: rpio.Pin(16), CloseRelay: rpio.Pin(13), IsOpen: false}
+	taps[3] = &tapStruct{OpenRelay: rpio.Pin(20), CloseRelay: rpio.Pin(19), IsOpen: false}
+	taps[4] = &tapStruct{OpenRelay: rpio.Pin(26), CloseRelay: rpio.Pin(21), IsOpen: false}
 
 	for _, tap := range taps {
 		tap.OpenRelay.Output()
