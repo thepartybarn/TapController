@@ -21,15 +21,10 @@ var (
 	_buildVersion     string
 	_homepageTemplate *template.Template
 	log               = logrus.New()
-	_taps             []tap
 	mqttClient        mqtt.Client
-)
 
-type tap struct {
-	OpenRelay  rpio.Pin
-	CloseRelay rpio.Pin
-	IsOpen     bool
-}
+	_taps map[int]*tapStruct
+)
 
 type usbDataMessage struct {
 	Key   string `json:"key"`
@@ -40,70 +35,40 @@ func main() {
 	var err error
 	log.SetLevel(logrus.TraceLevel)
 	log.Printf("---------- Program Started %v (%v) ----------", _buildVersion, _buildDate)
+	/*
+		err = loadPageTemplates()
+		if err != nil {
+			log.Panic(err)
+		}
+		//eth0IP
+		_, err = getIPAddress("eth0")
+		if err != nil {
+			log.Error(err)
+		}
+		//wlan0IP
+		_, err = getIPAddress("wlan0")
+		if err != nil {
+			log.Error(err)
+		}*/
 
-	err = loadPageTemplates()
-	if err != nil {
-		log.Panic(err)
-	}
-	//eth0IP
-	_, err = getIPAddress("eth0")
-	if err != nil {
-		log.Error(err)
-	}
-	//wlan0IP
-	_, err = getIPAddress("wlan0")
-	if err != nil {
-		log.Error(err)
-	}
-	err = setupTapRelays()
+	err, _taps = setupTapRelays()
 	if err != nil {
 		log.Panic(err)
 	}
 	defer rpio.Close()
 
-	go udpServer([]byte("Trailer Server"))
-	go httpServer()
+	/*
+		go udpServer([]byte("Trailer Server"))
+		go httpServer()
+	*/
 	go handleUSBDevice("/dev/ttyUSB0")
 	go handleUSBDevice("/dev/ttyUSB1")
 
-	connectToMQTT()
+	//connectToMQTT()
 
 	select {}
 }
-func setupTapRelays() error {
-	var err error
 
-	log.Trace("Opening GPIO")
-	err = rpio.Open()
-	if err != nil {
-		return err
-	}
-	log.Trace("Opened GPIO Successfully")
-
-	log.Trace("Setting Up GPIO")
-
-	_taps = make([]tap, 4)
-	_taps[0].OpenRelay = rpio.Pin(5)
-	_taps[0].CloseRelay = rpio.Pin(6)
-
-	_taps[1].OpenRelay = rpio.Pin(13)
-	_taps[1].CloseRelay = rpio.Pin(16)
-
-	_taps[2].OpenRelay = rpio.Pin(19)
-	_taps[2].CloseRelay = rpio.Pin(20)
-
-	_taps[3].OpenRelay = rpio.Pin(21)
-	_taps[3].CloseRelay = rpio.Pin(26)
-
-	for _, tap := range _taps {
-		tap.OpenRelay.Output()
-		tap.OpenRelay.High()
-		tap.CloseRelay.Output()
-		tap.CloseRelay.High()
-	}
-	log.Trace("Setup GPIO Successfully")
-	return nil
-}
 func handleUSBDevice(device string) {
 	var serialBuffer bytes.Buffer
 	var serialPort *serial.Port
@@ -207,25 +172,18 @@ func handleUSBMessage(Message usbDataMessage) {
 func cardScan(cardID string) {
 	log.Tracef("Card Scanned %v", cardID)
 }
-func tapButtonPress(tap int, state bool) {
-	log.Tracef("Tap %v Button Pressed %v", tap, state)
-	tap = tap - 1
-
-	if state && !_taps[tap].IsOpen {
-		_taps[tap].IsOpen = true
-		_taps[tap].OpenRelay.Low()
-		time.Sleep(700 * time.Millisecond)
-		_taps[tap].OpenRelay.High()
-	} else if !state && _taps[tap].IsOpen {
-		_taps[tap].IsOpen = false
-		_taps[tap].CloseRelay.Low()
-		time.Sleep(700 * time.Millisecond)
-		_taps[tap].CloseRelay.High()
+func tapButtonPress(index int, state bool) {
+	log.Tracef("Tap %v Scanned %v", index, state)
+	if state {
+		_taps[index].Open()
+	} else {
+		_taps[index].Close()
 	}
 }
 func cardButtonPress() {
-
+	log.Tracef("Card Button Pressed")
 }
+
 func connectToMQTT() error {
 	ServerAddr, err := net.ResolveUDPAddr("udp", "255.255.255.255:10001")
 	if err != nil {
