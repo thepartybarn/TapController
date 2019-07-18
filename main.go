@@ -23,7 +23,14 @@ var (
 	log               = logrus.New()
 	mqttClient        mqtt.Client
 
-	_taps map[int]*tapStruct
+	_taps     map[int]*tapStruct
+	_database *Database
+
+	_scanTimer *time.Timer
+
+	_lastCardID    string
+	_lastPerson    *Person
+	_authenticated bool
 )
 
 type usbDataMessage struct {
@@ -66,7 +73,19 @@ func main() {
 
 	//connectToMQTT()
 
-	select {}
+	_database, err = CreateDatabase()
+	if err != nil {
+		log.Panic(err)
+	}
+	_database.AddAdmin("04ed19ea9c6180")
+
+	select {
+	case <-_scanTimer.C:
+		log.Trace("Timer Expired")
+		_authenticated = false
+		_lastCardID = ""
+		_lastPerson = nil
+	}
 }
 
 func handleUSBDevice(device string) {
@@ -171,17 +190,29 @@ func handleUSBMessage(Message usbDataMessage) {
 }
 func cardScan(cardID string) {
 	log.Tracef("Card Scanned %v", cardID)
+	_lastCardID = cardID
+	if Person, ok := _database.hasUID(cardID); ok {
+		_lastPerson = &Person
+		_authenticated = true
+		_scanTimer = time.NewTimer(4 * time.Second)
+	}
 }
 func tapButtonPress(index int, state bool) {
-	log.Tracef("Tap %v Scanned %v", index, state)
-	if state {
+	log.Tracef("Tap Button %v Pressed %v", index, state)
+	//if state == true && _authenticated == true {
+	if state == true {
 		_taps[index].Open()
-	} else {
+	}
+	if state == false {
 		_taps[index].Close()
 	}
 }
 func cardButtonPress() {
 	log.Tracef("Card Button Pressed")
+	log.Tracef("Authenticated:%v CardID:%v (%v)", _authenticated, _lastCardID, _lastPerson)
+	if _authenticated && _lastPerson.canAdd && _lastCardID != "" {
+		_database.AddFriend(_lastCardID)
+	}
 }
 
 func connectToMQTT() error {
@@ -284,6 +315,7 @@ func getIPAddress(name string) (ipNet *net.IPNet, err error) {
 }
 
 //HTTP STUFF
+//Mike is a nerd
 func httpServer() {
 	var err error
 	http.HandleFunc("/", homepage)
