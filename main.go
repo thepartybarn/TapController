@@ -24,7 +24,7 @@ var (
 	mqttClient        mqtt.Client
 
 	_taps     map[int]*tapStruct
-	_database *Database
+	_database Database
 
 	_scanTimer *time.Timer
 

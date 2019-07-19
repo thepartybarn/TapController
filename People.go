@@ -14,7 +14,8 @@ type Person struct {
 	isCheap bool
 }
 
-func CreateDatabase() (database *Database, err error) {
+func CreateDatabase() (database Database, err error) {
+
 	database.People = make(map[string]Person)
 	return
 }
