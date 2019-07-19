@@ -3,9 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"html/template"
-	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -218,6 +216,7 @@ func cardButtonPress() {
 	}
 }
 
+/*
 func connectToMQTT() error {
 	ServerAddr, err := net.ResolveUDPAddr("udp", "255.255.255.255:10001")
 	if err != nil {
@@ -316,12 +315,12 @@ func getIPAddress(name string) (ipNet *net.IPNet, err error) {
 
 	return
 }
-
+*/
 //HTTP STUFF
 func httpServer() {
 	var err error
-	http.HandleFunc("/", homepage)
-	//http.HandleFunc("/api/setRelay", setRelayHandler)
+	http.HandleFunc("/", homePage)
+	http.HandleFunc("/api/addUser", addUserHandler)
 
 	//Serve Static Files
 	http.Handle("/images/", http.StripPrefix("/images/", http.FileServer(http.Dir("web/images/"))))
@@ -334,7 +333,7 @@ func httpServer() {
 		log.Panic(err)
 	}
 }
-func homepage(w http.ResponseWriter, r *http.Request) {
+func homePage(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	data := make(map[string]interface{})
@@ -346,33 +345,22 @@ func homepage(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 	}
 }
+
 func loadPageTemplates() error {
 	var err error
 	_homepageTemplate, err = template.ParseFiles("web/index.html")
 	return err
 }
 
-/*func setRelayHandler(w http.ResponseWriter, r *http.Request) {
+func addUserHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	RelayString := r.URL.Query().Get("Relay")
-	StateString := strings.ToUpper(r.URL.Query().Get("State"))
+	UID := r.URL.Query().Get("UID")
+	firstName := r.URL.Query().Get("firstName")
+	lastName := r.URL.Query().Get("lastName")
+	partyBarner, _ := strconv.ParseBool(r.URL.Query().Get("partyBarner"))
 
-	log.Trace("Passed In Relay:", RelayString, " State:", StateString)
+	log.Tracef("%v %v UID: %v Barner:%v", firstName, lastName, UID, partyBarner)
 
-	Relay, err := strconv.Atoi(RelayString)
-	if err != nil {
-		return
-	}
-	if Relay >= 1 && Relay <= 8 {
-		switch StateString {
-		case "TRUE":
-			log.Info("Set Relay ", Relay, " to ", StateString)
-			_relays[Relay-1].Low()
-		case "FALSE":
-			log.Info("Set Relay ", Relay, " to ", StateString)
-			_relays[Relay-1].High()
-		}
-	}
+	_database.AddPerson(UID, firstName, lastName, partyBarner)
 }
-*/

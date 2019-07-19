@@ -48,12 +48,12 @@ func (db *Database) hasUID(UID string) (Person Person, exists bool) {
 }
 func (db *Database) AddFriend(UID, NewUID string) {
 }
-func (db *Database) AddPerson(UID string, isAdmin, isBarner bool) (err error) {
-	/*_, exists := db.People[UID]
-	if UID != "" && !exists {
-		toAdd := Person{UID, isAdmin, isBarner}
-		db.People[UID] = toAdd
-	}*/
+func (db *Database) AddPerson(UID, firstName, lastName string, partyBarner bool) (err error) {
+	err = db.RunInsert("INSERT INTO public.users(\"UID\", \"First Name\", \"Last Name\", \"Barner\", \"Added By\")	VALUES ($1, $2, $3, $4, $5);",
+		UID, firstName, lastName, partyBarner, "")
+	if err != nil {
+		db.log.Error(err)
+	}
 	return
 }
 func (db *Database) GetPersonData(UID string) (err error, DataMap map[string]interface{}) {
@@ -79,6 +79,14 @@ func (db *Database) GetPersonData(UID string) (err error, DataMap map[string]int
 			return
 		}
 	*/
+	return
+}
+
+func (db *Database) RunInsert(queryString string, params ...interface{}) (err error) {
+	_, err = db.dbClient.Exec(queryString, params...)
+	if err != nil {
+		db.log.Error(err)
+	}
 	return
 }
 func (db *Database) RunQueryRows(queryString string) (error, int, []map[string]interface{}) {
