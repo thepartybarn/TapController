@@ -80,11 +80,12 @@ func main() {
 	_database.AddAdmin("04ed19ea9c6180")
 
 	select {
-	case <-_scanTimer.C:
+	/*case <-_scanTimer.C:
 		log.Trace("Timer Expired")
 		_authenticated = false
 		_lastCardID = ""
 		_lastPerson = nil
+	}*/
 	}
 }
 
