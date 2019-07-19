@@ -79,14 +79,17 @@ func main() {
 	}
 	_database.AddAdmin("04ed19ea9c6180")
 
-	_scanTimer = time.NewTimer(time.Second)
+	_scanTimer = time.NewTimer(5 * time.Second)
+	_scanTimer.Stop()
 
-	select {
-	case <-_scanTimer.C:
-		log.Trace("Timer Expired")
-		_authenticated = false
-		_lastCardID = ""
-		_lastPerson = nil
+	for {
+		select {
+		case <-_scanTimer.C:
+			log.Trace("Timer Expired")
+			_authenticated = false
+			_lastCardID = ""
+			_lastPerson = nil
+		}
 	}
 }
 
@@ -196,7 +199,7 @@ func cardScan(cardID string) {
 	if Person, ok := _database.hasUID(cardID); ok {
 		_lastPerson = &Person
 		_authenticated = true
-		_scanTimer = time.NewTimer(4 * time.Second)
+		_scanTimer.Reset(5 * time.Second)
 	}
 }
 func tapButtonPress(index int, state bool) {
