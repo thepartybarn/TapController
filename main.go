@@ -63,8 +63,8 @@ func main() {
 
 	/*
 		go udpServer([]byte("Trailer Server"))
-		go httpServer()
 	*/
+	go httpServer()
 	go handleUSBDevice("/dev/ttyUSB0")
 	go handleUSBDevice("/dev/ttyUSB1")
 
