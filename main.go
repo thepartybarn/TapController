@@ -28,9 +28,8 @@ var (
 
 	_scanTimer *time.Timer
 
-	_lastCardID    string
-	_lastPerson    *Person
-	_authenticated bool
+	_lastUID       string
+	_currentPerson *Person
 )
 
 type usbDataMessage struct {
@@ -84,10 +83,7 @@ func main() {
 	for {
 		select {
 		case <-_scanTimer.C:
-			log.Trace("Timer Expired")
-			_authenticated = false
-			_lastCardID = ""
-			_lastPerson = nil
+			timerExpired()
 		}
 	}
 }
@@ -192,19 +188,22 @@ func handleUSBMessage(Message usbDataMessage) {
 		tapButtonPress(4, state)
 	}
 }
-func cardScan(cardID string) {
-	log.Tracef("Card Scanned %v", cardID)
-	_lastCardID = cardID
-	if Person, ok := _database.hasUID(cardID); ok {
-		_lastPerson = &Person
-		_authenticated = true
+func cardScan(UID string) {
+	log.Tracef("Card Scanned %v", UID)
+	_lastUID = UID
+	if Person, ok := _database.hasUID(UID); ok {
+		_currentPerson = &Person
 		_scanTimer.Reset(5 * time.Second)
 	}
 }
+func timerExpired() {
+	log.Trace("Timer Expired")
+	_lastUID = ""
+	_currentPerson = nil
+}
 func tapButtonPress(index int, state bool) {
 	log.Tracef("Tap Button %v Pressed %v", index, state)
-	//if state == true && _authenticated == true {
-	if state == true {
+	if state == true && _currentPerson != nil {
 		_taps[index].Open()
 	}
 	if state == false {
@@ -213,9 +212,9 @@ func tapButtonPress(index int, state bool) {
 }
 func cardButtonPress() {
 	log.Tracef("Card Button Pressed")
-	log.Tracef("Authenticated:%v CardID:%v (%v)", _authenticated, _lastCardID, _lastPerson)
-	if _authenticated && _lastPerson.canAdd && _lastCardID != "" {
-		_database.AddFriend(_lastPerson.UID, _lastCardID)
+	log.Tracef("Person: %v LastUID:%v", _currentPerson, _lastUID)
+	if _currentPerson != nil && _currentPerson.canAdd && _lastUID != _currentPerson.UID && _lastUID != "" {
+		_database.AddFriend(_currentPerson.UID, _lastUID)
 	}
 }
 

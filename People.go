@@ -22,7 +22,7 @@ type Person struct {
 
 func CreateDatabase(logger *logrus.Logger) (database Database, err error) {
 	database.log = logger
-	database.dbClient, err = sql.Open("postgres", "host=pgsql port=5432 user=postgress password=Thunder@01 dbname=postgres sslmode=disable")
+	database.dbClient, err = sql.Open("postgres", "host=pgsql port=5432 user=postgres password=Thunder@01 dbname=postgres sslmode=disable")
 	if err != nil {
 		return
 	}
