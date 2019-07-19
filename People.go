@@ -18,7 +18,6 @@ type Person struct {
 }
 
 func CreateDatabase() (database Database, err error) {
-
 	database.People = make(map[string]Person)
 	return
 }
@@ -39,9 +38,12 @@ func (db *Database) AddFriend(UID string) (err error) {
 	return
 }
 func (db *Database) Commit() (err error) {
-	file, _ := json.MarshalIndent(db.People, "", " ")
-	err = ioutil.WriteFile("data/people.json", file, 0644)
-
+	dataToWrite, err := json.Marshal(db.People)
+	if err != nil {
+		log.Error("Marshal Error: %v")
+		return
+	}
+	err = ioutil.WriteFile("data/people.json", dataToWrite, 0666)
 	if err != nil {
 		log.Error("Error Commiting: %v")
 	}
@@ -49,6 +51,9 @@ func (db *Database) Commit() (err error) {
 }
 func (db *Database) Load() (err error) {
 	dataToLoad, err := ioutil.ReadFile("data/people.json")
+	if err != nil {
+		log.Error("Read file: %v")
+	}
 	err = json.Unmarshal(dataToLoad, &db)
 	if err != nil {
 		log.Error("Error Loading: %v")
