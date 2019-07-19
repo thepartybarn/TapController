@@ -82,6 +82,8 @@ func main() {
 	_scanTimer = time.NewTimer(5 * time.Second)
 	_scanTimer.Stop()
 
+	_database.Commit()
+
 	for {
 		select {
 		case <-_scanTimer.C:

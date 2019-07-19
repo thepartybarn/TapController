@@ -1,6 +1,9 @@
 package main
 
-import ()
+import (
+	"encoding/json"
+	"io/ioutil"
+)
 
 var ()
 
@@ -33,6 +36,23 @@ func (db *Database) AddBarner(UID string) (err error) {
 }
 func (db *Database) AddFriend(UID string) (err error) {
 	db.AddPerson(UID, false, false, true)
+	return
+}
+func (db *Database) Commit() (err error) {
+	file, _ := json.MarshalIndent(db.People, "", " ")
+	err = ioutil.WriteFile("data/people.json", file, 0644)
+
+	if err != nil {
+		log.Error("Error Commiting: %v")
+	}
+	return
+}
+func (db *Database) Load() (err error) {
+	dataToLoad, err := ioutil.ReadFile("data/people.json")
+	err = json.Unmarshal(dataToLoad, &db)
+	if err != nil {
+		log.Error("Error Loading: %v")
+	}
 	return
 }
 func (db *Database) AddPerson(UID string, isAdmin, isBarner, isFriend bool) (err error) {
