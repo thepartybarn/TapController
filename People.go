@@ -1,28 +1,28 @@
 package main
 
 import (
-  "database/sql"
-	"encoding/json"
-	"io/ioutil"
-
-  _ "github.com/lib/pq"
+	"database/sql"
+	"errors"
+	"fmt"
+	_ "github.com/lib/pq"
+	"github.com/sirupsen/logrus"
 )
 
 var ()
 
 type Database struct {
-  dbClient                     *sql.DB
-  log            *logrus.Logger
+	dbClient *sql.DB
+	log      *logrus.Logger
 }
 type Person struct {
-	UID     string
-	canAdd  bool
+	UID        string
+	canAdd     bool
 	drinkFancy bool
 }
 
 func CreateDatabase(logger *logrus.Logger) (database Database, err error) {
-  database.log = logger
-  database.dbClient, err = sql.Open(server, "host=pgsql port=5432 user=postgress password=Thunder@01 dbname=postgres sslmode=disable")
+	database.log = logger
+	database.dbClient, err = sql.Open("postgres", "host=pgsql port=5432 user=postgress password=Thunder@01 dbname=postgres sslmode=disable")
 	if err != nil {
 		return
 	}
@@ -33,21 +33,27 @@ func CreateDatabase(logger *logrus.Logger) (database Database, err error) {
 	database.log.Info("Connected to Database")
 	return
 }
-func (db *Database) hasUID(UID string) (Person Person, ok bool) {
-	err, DataMap := GetPersonData(UID)
-  if err != nil{
-    return
-  }
-  ok = true
-  //TODO COPY PERSON INFO here
+func (db *Database) hasUID(UID string) (Person Person, exists bool) {
+	err, DataMap := db.GetPersonData(UID)
+	if err != nil {
+		return
+	}
+	exists = true
+	//TODO COPY PERSON INFO here
+	newUID, ok := DataMap["UID"].(string)
+	if ok {
+		Person.UID = newUID
+	}
 	return
 }
+func (db *Database) AddFriend(UID, NewUID string) {
+}
 func (db *Database) AddPerson(UID string, isAdmin, isBarner bool) (err error) {
-	_, exists := db.People[UID]
+	/*_, exists := db.People[UID]
 	if UID != "" && !exists {
 		toAdd := Person{UID, isAdmin, isBarner}
 		db.People[UID] = toAdd
-	}
+	}*/
 	return
 }
 func (db *Database) GetPersonData(UID string) (err error, DataMap map[string]interface{}) {
@@ -66,13 +72,13 @@ func (db *Database) GetPersonData(UID string) (err error, DataMap map[string]int
 		err = errors.New("User is not in database")
 		return
 	}
-/*
-	SerialNumber, ok := NodeMap["SerialNumber"].(string)
-	if ok == false {
-		err = errors.New("SerialNumber not of type string")
-		return
-	}
-  */
+	/*
+		SerialNumber, ok := NodeMap["SerialNumber"].(string)
+		if ok == false {
+			err = errors.New("SerialNumber not of type string")
+			return
+		}
+	*/
 	return
 }
 func (db *Database) RunQueryRows(queryString string) (error, int, []map[string]interface{}) {

@@ -73,16 +73,13 @@ func main() {
 
 	//connectToMQTT()
 
-	_database, err = CreateDatabase()
+	_database, err = CreateDatabase(log)
 	if err != nil {
 		log.Panic(err)
 	}
-	_database.AddAdmin("04ed19ea9c6180")
 
 	_scanTimer = time.NewTimer(5 * time.Second)
 	_scanTimer.Stop()
-
-	_database.Commit()
 
 	for {
 		select {
@@ -218,7 +215,7 @@ func cardButtonPress() {
 	log.Tracef("Card Button Pressed")
 	log.Tracef("Authenticated:%v CardID:%v (%v)", _authenticated, _lastCardID, _lastPerson)
 	if _authenticated && _lastPerson.canAdd && _lastCardID != "" {
-		_database.AddFriend(_lastCardID)
+		_database.AddFriend(_lastPerson.UID, _lastCardID)
 	}
 }
 
