@@ -17,18 +17,22 @@ func (tap *tapStruct) Open() {
 	log.Tracef("Open Tap")
 	tap.IsOpen = true
 	tap.OpenRelay.Low()
+	time.Sleep(200 * time.Millisecond)
 	tap.CloseRelay.High()
 	time.Sleep(700 * time.Millisecond)
 	tap.OpenRelay.High()
+	time.Sleep(200 * time.Millisecond)
 }
 
 func (tap *tapStruct) Close() {
 	log.Tracef("Close Tap")
 	tap.IsOpen = false
 	tap.OpenRelay.High()
+	time.Sleep(200 * time.Millisecond)
 	tap.CloseRelay.Low()
 	time.Sleep(700 * time.Millisecond)
 	tap.CloseRelay.High()
+	time.Sleep(200 * time.Millisecond)
 }
 
 func setupTapRelays() (err error, taps map[int]*tapStruct) {

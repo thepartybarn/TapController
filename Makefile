@@ -32,3 +32,6 @@ push: format test checkin build
 
 	sudo docker push $(ImageName)
 	sudo docker push $(ImageNameWithVersion)
+local: 
+	env GOOS=linux GOARCH=arm GOARM=7 go build -ldflags "-X main._buildDate=$(BuildDate) -X main._buildVersion=$(GitVersion)" -o main *.go
+	sudo docker build -t $(ImageName) .
