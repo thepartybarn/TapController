@@ -79,13 +79,14 @@ func main() {
 	}
 	_database.AddAdmin("04ed19ea9c6180")
 
+	_scanTimer = time.NewTimer(time.Second)
+
 	select {
-	/*case <-_scanTimer.C:
+	case <-_scanTimer.C:
 		log.Trace("Timer Expired")
 		_authenticated = false
 		_lastCardID = ""
 		_lastPerson = nil
-	}*/
 	}
 }
 
@@ -316,7 +317,6 @@ func getIPAddress(name string) (ipNet *net.IPNet, err error) {
 }
 
 //HTTP STUFF
-//Mike is a nerd
 func httpServer() {
 	var err error
 	http.HandleFunc("/", homepage)
