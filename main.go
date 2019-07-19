@@ -203,13 +203,11 @@ func timerExpired() {
 }
 func tapButtonPress(index int, state bool) {
 	log.Tracef("Tap Button %v Pressed %v", index, state)
-	if _currentPerson != nil {
-		if state == true {
-			_taps[index].Open()
-		}
-		if state == false {
-			_taps[index].Close()
-		}
+	if state == true && _currentPerson != nil {
+		_taps[index].Open()
+	}
+	if state == false {
+		_taps[index].Close()
 	}
 }
 func cardButtonPress() {
