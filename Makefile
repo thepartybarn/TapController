@@ -3,35 +3,21 @@ ImageNameWithVersion = $(ImageName)-$(GitVersion)
 BuildDate := $(shell date -u +%Y%m%d.%H%M%S)
 GitVersion = $(shell git describe --always --long --dirty=-test)
 
-all: format test checkin build push
+push: buildgo builddocker
+	docker login
 
-format:
-	go get ./...
-	go fmt *.go
+	docker push $(ImageName)
+	docker push $(ImageNameWithVersion)
 
-test: format
-	go test -v ./...
+builddocker:
+	docker build -t $(ImageName) .
+	docker tag $(ImageName) $(ImageNameWithVersion)
 
-checkin: format test
-	-rm main
-	-git pull
-	-git commit -a
-	-git push
-
-build: format
+buildgo:
 	env GOOS=linux GOARCH=arm GOARM=7 go build -ldflags "-X main._buildDate=$(BuildDate) -X main._buildVersion=$(GitVersion)" -o main *.go
 
-push: format test checkin build
+run: build
+	docker build -t $(ImageName) .
 
-	@echo Image Name: $(ImageName)
-	@echo Image Name: $(ImageNameWithVersion)
-
-	sudo docker build -t $(ImageName) .
-	sudo docker tag $(ImageName) $(ImageNameWithVersion)
-	sudo docker login
-
-	sudo docker push $(ImageName)
-	sudo docker push $(ImageNameWithVersion)
-local: 
-	env GOOS=linux GOARCH=arm GOARM=7 go build -ldflags "-X main._buildDate=$(BuildDate) -X main._buildVersion=$(GitVersion)" -o main *.go
-	sudo docker build -t $(ImageName) .
+local: buildgo builddocker
+	docker save $(ImageName) > tapcontroller.tar

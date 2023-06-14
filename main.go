@@ -1,17 +1,11 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"html/template"
-	"net/http"
-	"strconv"
 	"time"
 
-	"github.com/eclipse/paho.mqtt.golang"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/sirupsen/logrus"
-	"github.com/stianeikeland/go-rpio"
-	"github.com/tarm/serial"
 )
 
 var (
@@ -21,198 +15,39 @@ var (
 	log               = logrus.New()
 	mqttClient        mqtt.Client
 
-	_taps     map[int]*tapStruct
-	_database Database
+	_database *DatabaseConnection
 
 	_scanTimer *time.Timer
 
-	_lastUID       string
-	_currentPerson *Person
+	_heartbeatTicker *time.Ticker
 )
-
-type usbDataMessage struct {
-	Key   string `json:"key"`
-	Value string `json:"Value"`
-}
 
 func main() {
 	var err error
 	log.SetLevel(logrus.TraceLevel)
 	log.Printf("---------- Program Started %v (%v) ----------", _buildVersion, _buildDate)
-	/*
-		err = loadPageTemplates()
-		if err != nil {
-			log.Panic(err)
-		}
-		//eth0IP
-		_, err = getIPAddress("eth0")
-		if err != nil {
-			log.Error(err)
-		}
-		//wlan0IP
-		_, err = getIPAddress("wlan0")
-		if err != nil {
-			log.Error(err)
-		}*/
 
-	err, _taps = setupTapRelays()
+	go handleTapRelays()
+
+	_database, err = SetupDatabaseConnections(log)
 	if err != nil {
 		log.Panic(err)
 	}
-	defer rpio.Close()
 
-	/*
-		go udpServer([]byte("Trailer Server"))
-	*/
-	go httpServer()
-	go handleUSBDevice("/dev/ttyUSB0")
-	go handleUSBDevice("/dev/ttyUSB1")
-
-	//connectToMQTT()
-
-	_database, err = CreateDatabase(log)
-	if err != nil {
-		log.Panic(err)
-	}
+	OpenUSBDevice("/dev/ttyUSB0", log)
+	OpenUSBDevice("/dev/ttyUSB1", log)
 
 	_scanTimer = time.NewTimer(5 * time.Second)
 	_scanTimer.Stop()
+	_heartbeatTicker = time.NewTicker(3 * time.Second)
 
 	for {
 		select {
 		case <-_scanTimer.C:
 			timerExpired()
+		case <-_heartbeatTicker.C:
+			//USBHeartbeat()
 		}
-	}
-}
-
-func handleUSBDevice(device string) {
-	var serialBuffer bytes.Buffer
-	var serialPort *serial.Port
-
-	serialConfig := &serial.Config{Name: device, Baud: 9600}
-
-	var err error
-	//Serial Port Open Loop
-	for {
-		serialPort, err = serial.OpenPort(serialConfig)
-		if err != nil {
-			log.Error("USB Serial Port Not Found")
-			time.Sleep(time.Second)
-		}
-		defer serialPort.Close()
-
-		temp := make([]byte, 256)
-		var MessagePayload []byte
-		var nRead int
-
-		/*TODO handle usb ports better
-		defer func() {
-			if r := recover(); r != nil {
-				log.Info("Recovered in f", r)
-			}
-		}()
-		*/
-		//Read Loop
-		for {
-			nRead, err = serialPort.Read(temp)
-			if err != nil {
-				log.Warn("USB Read Error:", err)
-				break
-			}
-			if nRead > 0 {
-				serialBuffer.Write(temp[:nRead])
-			}
-			tempData := serialBuffer.Bytes()
-			endOfMessage := bytes.IndexByte(tempData, '}')
-			if endOfMessage > 0 {
-				beginingOfMessage := bytes.IndexByte(tempData, '{')
-				if beginingOfMessage >= 0 {
-					MessagePayload = tempData[beginingOfMessage : endOfMessage+1]
-				}
-				//Clear buffer before }
-				serialBuffer.Next(endOfMessage + 1)
-			} else {
-				//Didn't Find End Keep storing buffer.
-				//TODO We should limit this to a particular size
-			}
-			//Process Message
-			if len(MessagePayload) > 3 {
-				log.Trace("USB Message Received: ", string(MessagePayload))
-				var Message usbDataMessage
-				err := json.Unmarshal(MessagePayload, &Message)
-				MessagePayload = nil
-				if err != nil {
-					log.Warn("USB Marshal Error:", err)
-				} else {
-					go handleUSBMessage(Message)
-				}
-			}
-		}
-	}
-	log.Warn("USB Serial Loop Exited")
-	serialPort.Close()
-}
-func handleUSBMessage(Message usbDataMessage) {
-	switch Message.Key {
-	case "cardID":
-		//Convert negative numbers to positive
-		cardScan(Message.Value)
-	case "buttonpress":
-		cardButtonPress()
-	case "tap1":
-		state, err := strconv.ParseBool(Message.Value)
-		if err != nil {
-			log.Warn(err)
-		}
-		tapButtonPress(1, state)
-	case "tap2":
-		state, err := strconv.ParseBool(Message.Value)
-		if err != nil {
-			log.Warn(err)
-		}
-		tapButtonPress(2, state)
-	case "tap3":
-		state, err := strconv.ParseBool(Message.Value)
-		if err != nil {
-			log.Warn(err)
-		}
-		tapButtonPress(3, state)
-	case "tap4":
-		state, err := strconv.ParseBool(Message.Value)
-		if err != nil {
-			log.Warn(err)
-		}
-		tapButtonPress(4, state)
-	}
-}
-func cardScan(UID string) {
-	log.Tracef("Card Scanned %v", UID)
-	_lastUID = UID
-	if Person, ok := _database.hasUID(UID); ok {
-		_currentPerson = &Person
-		_scanTimer.Reset(5 * time.Second)
-	}
-}
-func timerExpired() {
-	log.Trace("Timer Expired")
-	_lastUID = ""
-	_currentPerson = nil
-}
-func tapButtonPress(index int, state bool) {
-	log.Tracef("Tap Button %v Pressed %v", index, state)
-	if state == true && _currentPerson != nil {
-		_taps[index].Open()
-	}
-	if state == false {
-		_taps[index].Close()
-	}
-}
-func cardButtonPress() {
-	log.Tracef("Card Button Pressed")
-	log.Tracef("Person: %v LastUID:%v", _currentPerson, _lastUID)
-	if _currentPerson != nil && _currentPerson.canAdd && _lastUID != _currentPerson.UID && _lastUID != "" {
-		_database.AddFriend(_currentPerson.UID, _lastUID)
 	}
 }
 
@@ -296,71 +131,4 @@ func udpServer(dataToSend []byte) {
 		fmt.Printf("packet-written: bytes=%d to=%s\n", n, addr.String())
 	}
 }
-func getIPAddress(name string) (ipNet *net.IPNet, err error) {
-	iface, err := net.InterfaceByName(name)
-	if err != nil {
-		return
-	}
-	addrs, err := iface.Addrs()
-	if err != nil {
-		return
-	}
-	for _, a := range addrs {
-		item, ok := a.(*net.IPNet)
-		if ok && !item.IP.IsLoopback() && item.IP.To4() != nil {
-			log.Tracef("%v: %v", name, item.String())
-			ipNet = item
-		}
-	}
-
-	return
-}
 */
-//HTTP STUFF
-func httpServer() {
-	var err error
-	http.HandleFunc("/", homePage)
-	http.HandleFunc("/api/addUser", addUserHandler)
-
-	//Serve Static Files
-	http.Handle("/images/", http.StripPrefix("/images/", http.FileServer(http.Dir("web/images/"))))
-	http.Handle("/scripts/", http.StripPrefix("/scripts/", http.FileServer(http.Dir("web/scripts/"))))
-	http.Handle("/styles/", http.StripPrefix("/styles/", http.FileServer(http.Dir("web/styles/"))))
-
-	log.Trace("Opening HTTP Server")
-	err = http.ListenAndServe(":80", nil)
-	if err != nil {
-		log.Panic(err)
-	}
-}
-func homePage(w http.ResponseWriter, r *http.Request) {
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	data := make(map[string]interface{})
-	data["BuildDate"] = "UnSet"
-	data["BuildVersion"] = "UnSet"
-
-	err := _homepageTemplate.Execute(w, data)
-	if err != nil {
-		log.Println(err)
-	}
-}
-
-func loadPageTemplates() error {
-	var err error
-	_homepageTemplate, err = template.ParseFiles("web/index.html")
-	return err
-}
-
-func addUserHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	UID := r.URL.Query().Get("UID")
-	firstName := r.URL.Query().Get("firstName")
-	lastName := r.URL.Query().Get("lastName")
-	partyBarner, _ := strconv.ParseBool(r.URL.Query().Get("partyBarner"))
-
-	log.Tracef("%v %v UID: %v Barner:%v", firstName, lastName, UID, partyBarner)
-
-	_database.AddPerson(UID, firstName, lastName, partyBarner)
-}
