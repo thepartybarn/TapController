@@ -53,8 +53,8 @@ func OpenUSBDevice(Path string, log *logrus.Logger) (usbDevice *USBDevice) {
 
 func (usbDevice *USBDevice) ProcessingLoop() {
 	var err error
-	log.Tracef("%v Serial Processing Loop", usbDevice.Path)
-	defer log.Tracef("%v Exited Serial Processing Loop", usbDevice.Path)
+	log.Tracef("Starting USB Processing Loop: %v ", usbDevice.Path)
+	defer log.Tracef("Exited USB Processing Loop: %v ", usbDevice.Path)
 	for {
 		usbDevice.SerialPort, err = serial.OpenPort(&serial.Config{Name: usbDevice.Path, Baud: 115200})
 		if err != nil {
